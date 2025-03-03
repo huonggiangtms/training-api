@@ -3,15 +3,14 @@ const mongoose = require("mongoose");
 const bodyParser = require("body-parser");
 
 const app = express();
+// Middleware
+app.use(bodyParser.json());
 // Import routes từ index.js
 app.use("/api", require("./routes"));
 
-// Middleware
-app.use(bodyParser.json());
-
 // Database connection
 const mongoURI =
-  "mongodb+srv://giangnguyen1:Ztdts55fuZu6VoUJ@cluster0.aef8o.mongodb.net/Cluster0?retryWrites=true&w=majority";
+  "mongodb+srv://giangnguyen1:Ztdts55fuZu6VoUJ@cluster0.aef8o.mongodb.net/training-api?retryWrites=true&w=majority";
 mongoose
   .connect(mongoURI, {
     useNewUrlParser: true,
