@@ -2,7 +2,7 @@ const router = require("express").Router();
 const Order = require("../models/order");
 const Product = require("../models/product");
 const Cart = require("../models/cart");
-const { authUser } = require("../auth/auth");
+const { authUser, authRole } = require("../auth/auth");
 
 // 3. Order Processing (Xử lý đơn hàng)
 
@@ -46,7 +46,7 @@ router.post("/order", authUser, async (req, res) => {
       user: userId,
       items: orderItems,
       total: total,
-      status: "processing",
+      status: "pending",
     });
 
     await newOrder.save();
@@ -58,16 +58,13 @@ router.post("/order", authUser, async (req, res) => {
 
     await cart.save();
 
-    res.status(201).json({ message: "Đặt hàng thành công", order: newOrder });
+    res.status(201).json({ message: "Order successful", order: newOrder });
   } catch (err) {
-    res.status(500).json({
-      message: "Lỗi máy chủ, vui lòng thử lại sau",
-      error: err.message,
-    });
+    res.status(500).json({ message: err.message });
   }
 });
 
-// Xác nhận đơn hàng
+// Xác nhận đơn hàng - Huỷ đơn hàng
 //http://localhost:3000/api/order/67c6d22e3d86470d53674c00/confirm
 router.put("/order/:id/confirm", authUser, async (req, res) => {
   try {
@@ -75,23 +72,82 @@ router.put("/order/:id/confirm", authUser, async (req, res) => {
     const { status } = req.body;
     const userId = req.user.id;
     // Kiểm tra trạng thái hợp lệ
-    if (!["confirmed", "canceled"].includes(status)) {
-      return res.status(400).json({ message: "Trạng thái không hợp lệ." });
+    if (!["processing", "canceled"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
     }
     // Tìm đơn hàng
     const order = await Order.findOne({ _id: id, user: userId });
     if (!order) {
       return res.status(404).json({
-        message:
-          "Không tìm thấy đơn hàng hoặc bạn không có quyền xác nhận đơn hàng này.",
+        message: "Order not found or you do not have access",
       });
     }
     // Cập nhật trạng thái đơn hàng
     order.status = status;
     await order.save();
-    res.json({ message: "Xác nhận đơn hàng thành công", order });
+    res.json({ message: "Comfirm status successful", order });
   } catch (err) {
-    res.status(500).json({ message: "Lỗi máy chủ, vui lòng thử lại sau" });
+    res.status(500).json({ message: err.message });
   }
 });
+
+// Xem danh sách đơn hàng của user
+//http://localhost:3000/api/order/
+router.get("/order", authUser, async (req, res) => {
+  try {
+    const orders = await Order.find({ user: req.user._id });
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Xem chi tiết đơn hàng
+//http://localhost:3000/api/order/67c6d22e3d86470d53674c00
+router.get("/order/:id", authUser, async (req, res) => {
+  try {
+    const order = await Order.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+
+    if (!order) {
+      return res.status(404).json({ message: "not found order" });
+    }
+
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Admin Quản lý trạng thái đơn hàng (đang xử lý, đã giao, đã hủy...)
+//http://localhost:3000/api/admin/order/67c6d22e3d86470d53674c00/status
+router.put(
+  "/admin/order/:id/status",
+  authUser,
+  authRole("admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!["processing", "delivered", "canceled"].includes(status)) {
+        return res.status(400).json({ message: "invalid status" });
+      }
+
+      const order = await Order.findById(id);
+      if (!order) {
+        return res.status(404).json({ message: "not found order" });
+      }
+
+      order.status = status;
+      await order.save();
+
+      res.json({ message: "Update status successful", order });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  }
+);
 module.exports = router;
